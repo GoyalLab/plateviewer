@@ -81,7 +81,8 @@ python plate_viewer.py
 ## Performance Tip
 
 The app supports multiple plates, but **initial load time increases** with dataset size.
-➡️ **Recommended: Load only 1–2 plates at a time for best speed.**
+
+**Recommended: Load only 1–2 plates at a time for best speed.**
 
 ---
 

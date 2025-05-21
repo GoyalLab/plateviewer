@@ -100,6 +100,9 @@ class PlateViewer(QWidget):
         self.detail_timepoint_buttons = QHBoxLayout()
         self.detail_layout.addLayout(self.detail_timepoint_buttons)
 
+        self.gfp_timepoint_buttons = QHBoxLayout()
+        self.detail_layout.addLayout(self.gfp_timepoint_buttons)
+
         self.graphics_view = ZoomableGraphicsView()
         self.scene = QGraphicsScene()
         self.graphics_view.setScene(self.scene)
@@ -190,7 +193,7 @@ class PlateViewer(QWidget):
         files = sorted(os.listdir(folder))
         seen = set()
         for fname in files:
-            if not fname.lower().endswith(".tif") or re.search(r" \d+\.tif$", fname):
+            if not fname.lower().endswith(".tif"):
                 continue
             match = pattern.search(fname)
             if not match:
@@ -201,12 +204,15 @@ class PlateViewer(QWidget):
             if key in seen:
                 continue
             seen.add(key)
+
+            is_gfp = "GFP" in fname.upper()
             self.image_data.append({
                 "plate": plate,
                 "well": meta["well"],
                 "timepoint": meta["timepoint"],
                 "path": os.path.join(folder, fname),
-                "filename": fname
+                "filename": fname,
+                "is_gfp": is_gfp
             })
 
         self.plates = sorted(set(d["plate"] for d in self.image_data))
@@ -222,19 +228,29 @@ class PlateViewer(QWidget):
         self.current_timepoint = sorted(set(d["timepoint"] for d in plate_images))[0]
         self.display_detail_image()
 
-        # Refresh checkboxes for the new well
-        self.refresh_checkboxes()
-
+        # Clear existing timepoint buttons
         for i in reversed(range(self.detail_timepoint_buttons.count())):
             self.detail_timepoint_buttons.itemAt(i).widget().setParent(None)
+        for i in reversed(range(self.gfp_timepoint_buttons.count())):
+            self.gfp_timepoint_buttons.itemAt(i).widget().setParent(None)
 
+        # Create timepoint buttons
         self.timepoint_btns = {}
+        self.gfp_timepoint_btns = {}
         for d in sorted(plate_images, key=lambda x: x["timepoint"]):
             btn = QPushButton(d["timepoint"])
             btn.setCheckable(True)
             btn.clicked.connect(lambda _, tp=d["timepoint"]: self.update_timepoint(tp))
             self.detail_timepoint_buttons.addWidget(btn)
             self.timepoint_btns[d["timepoint"]] = btn
+
+            if d["is_gfp"]:
+                gfp_btn = QPushButton(d["timepoint"])
+                gfp_btn.setCheckable(True)
+                gfp_btn.setStyleSheet("color: green")
+                gfp_btn.clicked.connect(lambda _, tp=d["timepoint"]: self.update_timepoint(tp, is_gfp=True))
+                self.gfp_timepoint_buttons.addWidget(gfp_btn)
+                self.gfp_timepoint_btns[d["timepoint"]] = gfp_btn
 
         self.highlight_active_timepoint()
         self.stacked_layout.setCurrentWidget(self.detail_widget)
@@ -313,16 +329,29 @@ class PlateViewer(QWidget):
         self.singlet_checkbox.setChecked(current_label == "singlet")
         self.inconclusive_checkbox.setChecked(current_label == "inconclusive")
 
+        # Clear existing timepoint buttons
         for i in reversed(range(self.detail_timepoint_buttons.count())):
             self.detail_timepoint_buttons.itemAt(i).widget().setParent(None)
+        for i in reversed(range(self.gfp_timepoint_buttons.count())):
+            self.gfp_timepoint_buttons.itemAt(i).widget().setParent(None)
 
+        # Create timepoint buttons
         self.timepoint_btns = {}
+        self.gfp_timepoint_btns = {}
         for d in sorted(plate_images, key=lambda x: x["timepoint"]):
             btn = QPushButton(d["timepoint"])
             btn.setCheckable(True)
             btn.clicked.connect(lambda _, tp=d["timepoint"]: self.update_timepoint(tp))
             self.detail_timepoint_buttons.addWidget(btn)
             self.timepoint_btns[d["timepoint"]] = btn
+
+            if d["is_gfp"]:
+                gfp_btn = QPushButton(d["timepoint"])
+                gfp_btn.setCheckable(True)
+                gfp_btn.setStyleSheet("color: green")
+                gfp_btn.clicked.connect(lambda _, tp=d["timepoint"]: self.update_timepoint(tp, is_gfp=True))
+                self.gfp_timepoint_buttons.addWidget(gfp_btn)
+                self.gfp_timepoint_btns[d["timepoint"]] = gfp_btn
 
         self.highlight_active_timepoint()
         self.stacked_layout.setCurrentWidget(self.detail_widget)
@@ -334,33 +363,57 @@ class PlateViewer(QWidget):
             del self.checked_wells[(self.current_plate, self.current_well)]
         self.update_grid()
 
-    def update_timepoint(self, tp):
+    def update_timepoint(self, tp, is_gfp=False):
         self.zoom_state = self.graphics_view.get_transform()
         self.current_timepoint = tp
-        self.display_detail_image()
+        self.display_detail_image(is_gfp=is_gfp)
         self.highlight_active_timepoint()
 
     def highlight_active_timepoint(self):
         for tp, btn in self.timepoint_btns.items():
             btn.setChecked(tp == self.current_timepoint)
 
-    def display_detail_image(self):
+        for tp, btn in self.gfp_timepoint_btns.items():
+            btn.setChecked(tp == self.current_timepoint)
+
+    def display_detail_image(self, is_gfp=False):
         self.scene.clear()
         matches = [d for d in self.image_data if d["plate"] == self.current_plate and d["well"] == self.current_well and d["timepoint"] == self.current_timepoint]
-        if matches:
-            d = matches[0]
-            self.current_filename = d["filename"]
-            self.detail_label.setText(f"{self.current_plate}-{self.current_well}: {self.current_filename}")
-            img = Image.open(d["path"]).convert("L")
+        if not matches:
+            return
+
+        grayscale_image = next((d for d in matches if not d["is_gfp"]), None)
+        gfp_image = next((d for d in matches if d["is_gfp"]), None)
+
+        if grayscale_image:
+            img = Image.open(grayscale_image["path"]).convert("L")
             data = img.tobytes("raw", "L")
             qimg = QImage(data, img.width, img.height, QImage.Format_Grayscale8)
             pixmap = QPixmap.fromImage(qimg)
             item = QGraphicsPixmapItem(pixmap)
             self.scene.addItem(item)
-            if self.zoom_state:
-                self.graphics_view.set_transform(self.zoom_state)
-            else:
-                self.graphics_view.fitInView(item, Qt.KeepAspectRatio)
+
+        if is_gfp and gfp_image:
+            img = Image.open(gfp_image["path"]).convert("L")
+            data = img.tobytes("raw", "L")
+            qimg = QImage(data, img.width, img.height, QImage.Format_Grayscale8)
+
+            # Apply green color to the GFP channel
+            green_overlay = QImage(qimg.size(), QImage.Format_ARGB32)
+            green_overlay.fill(Qt.transparent)
+            for y in range(qimg.height()):
+                for x in range(qimg.width()):
+                    intensity = qimg.pixel(x, y) & 0xFF
+                    green_overlay.setPixel(x, y, QColor(0, intensity, 0, 128).rgba())  # Semi-transparent green
+
+            pixmap = QPixmap.fromImage(green_overlay)
+            item = QGraphicsPixmapItem(pixmap)
+            self.scene.addItem(item)
+
+        if self.zoom_state:
+            self.graphics_view.set_transform(self.zoom_state)
+        else:
+            self.graphics_view.fitInView(self.scene.itemsBoundingRect(), Qt.KeepAspectRatio)
 
     def handle_prev(self):
         self.zoom_state = None
@@ -417,6 +470,11 @@ class PlateViewer(QWidget):
             elif event.key() == Qt.Key_D:
                 self.zoom_state = self.graphics_view.get_transform()
                 self.next_timepoint()
+            elif event.key() == Qt.Key_W:  # Toggle GFP on
+                if self.current_timepoint in self.gfp_timepoint_btns:
+                    self.update_timepoint(self.current_timepoint, is_gfp=True)
+            elif event.key() == Qt.Key_S:  # Toggle GFP off
+                self.update_timepoint(self.current_timepoint, is_gfp=False)
         return super().eventFilter(source, event)
 
 if __name__ == '__main__':

@@ -6,9 +6,9 @@ import re
 import numpy as np
 from PyQt5.QtWidgets import (QApplication, QWidget, QLabel, QGridLayout, QPushButton, QVBoxLayout, QComboBox, QFileDialog, QScrollArea, QHBoxLayout, QStackedLayout, QGraphicsView, QGraphicsScene, QGraphicsPixmapItem, QCheckBox, QButtonGroup, QProgressBar)
 from PyQt5.QtGui import QPixmap, QImage, QWheelEvent, QPainter, QColor, QPen
-from PyQt5.QtCore import Qt, QEvent
+from PyQt5.QtCore import Qt, QEvent, QObject
 from PyQt5.QtCore import QThread, pyqtSignal
-from PyQt5.QtCore import QMutex
+from PyQt5.QtCore import QMutex, QTimer
 from PIL import Image
 
 
@@ -65,6 +65,7 @@ class PlateLoadingThread(QThread):
 
     def __init__(self, image_data, current_plate):
         super().__init__()
+        self.loading_threads = []
         self.image_data = image_data
         self.current_plate = current_plate
 
@@ -78,6 +79,7 @@ class PlateLoadingThread(QThread):
             if img_array is not None:
                 loaded_images[well] = img_array
         self.images_loaded.emit(loaded_images)
+
 class CachingThread(QThread):
     finished = pyqtSignal(dict)  # Signal to send cached data to the main thread
 
@@ -109,18 +111,51 @@ class CachingThread(QThread):
         # Emit the cached data
         self.finished.emit(cached_data)
 
-class LoadingThread(QThread):
-    loading_finished = pyqtSignal()  # Signal to indicate loading is complete
+class ThreadedLoader(QObject):
+    image_data_ready = pyqtSignal(list)
 
-    def __init__(self, plate_viewer, folder):
+    def __init__(self, folder):
         super().__init__()
-        self.plate_viewer = plate_viewer
         self.folder = folder
 
+    def load_images(self):
+        pattern = re.compile(r"_(?P<plate>plate\d+)_.*?(?P<well>[A-H](?:1[0-2]|[1-9]))[^\n]*?(?P<timepoint>\d{2}d\d{2}h\d{2}m)")
+        image_data = []
+        files = sorted(os.listdir(self.folder))
+        for fname in files:
+            if not fname.lower().endswith(".tif"):
+                continue
+            match = pattern.search(fname)
+            if not match:
+                continue
+            meta = match.groupdict()
+            plate = meta["plate"].upper()
+            well = meta["well"]
+            timepoint = meta["timepoint"]
+            is_gfp = "GFP" in fname.upper()
+            image_data.append({
+                "plate": plate,
+                "well": well,
+                "timepoint": timepoint,
+                "path": os.path.join(self.folder, fname),
+                "filename": fname,
+                "is_gfp": is_gfp
+            })
+        self.image_data_ready.emit(image_data)
+
+class LoadingThread(QThread):
+    image_data_ready = pyqtSignal(list)
+
+    def __init__(self, folder):
+        super().__init__()
+        self.loader = ThreadedLoader(folder)
+        self.loader.image_data_ready.connect(self.emit_result)
+
     def run(self):
-        # Load images and cache wells
-        self.plate_viewer.load_images(self.folder)
-        self.loading_finished.emit()  # Emit signal when loading is complete
+        self.loader.load_images()
+
+    def emit_result(self, image_data):
+        self.image_data_ready.emit(image_data)
 
 class ZoomableGraphicsView(QGraphicsView):
     def __init__(self):
@@ -153,6 +188,8 @@ class PlateViewer(QWidget):
         # Initialize attributes
         self.image_data = []
         self.plates = []
+        self.caching_threads = []
+        self.loading_threads = []
         self.current_plate = None
         self.current_timepoint = None
         self.current_well = None
@@ -281,9 +318,21 @@ class PlateViewer(QWidget):
         # Prompt for folder and start loading thread
         folder = QFileDialog.getExistingDirectory(self, "Select Image Folder")
         if folder:
-            self.loading_thread = LoadingThread(self, folder)
-            self.loading_thread.loading_finished.connect(self.on_loading_finished)
+            self.loading_thread = LoadingThread(folder)
+            self.loading_thread.image_data_ready.connect(self.on_image_data_ready)
             self.loading_thread.start()
+
+    def on_image_data_ready(self, image_data):
+        self.image_data = image_data
+        #print(f"Loaded image data: {self.image_data}")
+        self.plates = sorted(set(d["plate"] for d in self.image_data))
+        self.plate_selector.addItems(self.plates)
+        self.update_plate()
+        self.start_plate_loading_thread()  # <-- Only call here!
+        self.show()
+
+    def load_images(self, folder):
+        pass
 
     def on_loading_finished(self):
         """Show the main window after loading is complete."""
@@ -430,14 +479,11 @@ class PlateViewer(QWidget):
 
         self.well_cache[well] = {}  # Mark the well as being cached
 
-        # Start the caching thread
-        self.caching_thread = CachingThread(well, self.image_data, self.current_plate)
-        self.caching_thread.finished.connect(self.update_thumbnail_cache)  # Connect finished signal
-        self.caching_thread.start()
+        # Use the thread manager that tracks threads
+        self.start_caching_thread(well)
 
     def update_thumbnail_cache(self, cached_data):
         self.thumbnail_cache.update(cached_data)
-        self.update_grid()
 
     def preload_next_wells(self, num_wells=5):
         """Preload images for the next `num_wells` wells."""
@@ -459,8 +505,15 @@ class PlateViewer(QWidget):
 
     def start_caching_thread(self, well):
         """Start a background thread to cache images for the given well."""
-        self.caching_thread = CachingThread(well, self.image_data, self.current_plate)
-        self.caching_thread.start()
+        thread = CachingThread(well, self.image_data, self.current_plate)
+        thread.finished.connect(self.cleanup_caching_thread)
+        thread.finished.connect(self.update_thumbnail_cache)
+        thread.start()
+        self.caching_threads.append(thread)
+
+    def cleanup_caching_thread(self, *args):
+        # Remove finished threads from the list
+        self.caching_threads = [t for t in self.caching_threads if t.isRunning()]
 
     def highlight_active_timepoint(self):
         """Highlight the active timepoint button."""
@@ -470,6 +523,7 @@ class PlateViewer(QWidget):
     def update_plate(self):
         self.current_plate = self.plate_selector.currentText()
         self.update_grid()
+        self.start_plate_loading_thread()  # <-- Only call here!
     
     def on_caching_finished(self):
         """Handle the completion of the caching thread."""
@@ -499,11 +553,22 @@ class PlateViewer(QWidget):
                 layout.setContentsMargins(0, 0, 0, 0)  # Remove margins
                 layout.setSpacing(0)
 
-                # Placeholder for the image
+                # Image label for the well image
+                image_label = QLabel()
+                image_label.setStyleSheet("background-color: black;")
+                image_label.setFixedSize(60, 60)  # Adjust size as needed
+                image_label.setAlignment(Qt.AlignCenter)
+                layout.addWidget(image_label)
+
+                # Transparent button for click handling
                 image_button = QPushButton()
-                image_button.setStyleSheet("background-color: black;")  # Placeholder background
-                image_button.clicked.connect(lambda _, w=well: self.open_detail_view(w))  # Connect to detail view
-                layout.addWidget(image_button)
+                image_button.setStyleSheet("background: transparent;")
+                image_button.setFixedSize(60, 60)
+                image_button.clicked.connect(lambda _, w=well: self.open_detail_view(w))
+                # Place the button on top of the label
+                image_button.setAttribute(Qt.WA_TransparentForMouseEvents, False)
+                image_button.raise_()
+                layout.addWidget(image_button, 0, Qt.AlignAbsolute)
 
                 # Well label
                 well_label = QLabel(well)
@@ -515,9 +580,6 @@ class PlateViewer(QWidget):
 
                 # Add the container widget to the grid layout
                 self.grid_layout.addWidget(container_widget, i, j)
-
-        # Start the plate loading thread
-        self.start_plate_loading_thread()
 
     def update_timepoint(self, tp, is_gfp=False):
         self.zoom_state = self.graphics_view.get_transform()
@@ -619,17 +681,19 @@ class PlateViewer(QWidget):
 
     def start_plate_loading_thread(self):
         """Start a background thread to load the initial plate."""
-        self.loading_thread = PlateLoadingThread(
-            self.image_data, 
-            self.current_plate
-        )
-        self.loading_thread.images_loaded.connect(self.update_grid_with_images)
-        self.loading_thread.finished.connect(self.show_grid_after_loading)
-        self.loading_thread.start()
+        thread = PlateLoadingThread(self.image_data, self.current_plate)
+        thread.images_loaded.connect(self.update_grid_with_images)
+        thread.finished.connect(self.show_grid_after_loading)
+        thread.finished.connect(lambda: self.cleanup_loading_thread(thread))
+        thread.start()
+        self.loading_threads.append(thread)
+
+    def cleanup_loading_thread(self, thread):
+        # Remove finished threads from the list
+        self.loading_threads = [t for t in self.loading_threads if t.isRunning()]
 
     def show_grid_after_loading(self):
         """Show the grid after all wells have been loaded."""
-        self.update_grid()  # Populate the grid with wells
         self.scroll_area.show()  # Make the grid visible
     
     
@@ -638,15 +702,14 @@ class PlateViewer(QWidget):
         for i in range(self.grid_layout.count()):
             container_widget = self.grid_layout.itemAt(i).widget()
             stacked_layout = container_widget.layout()
-            well_label = stacked_layout.itemAt(1).widget()  # The well label is the second widget
+            image_label = stacked_layout.itemAt(0).widget()  # The image label is the first widget
+            well_label = stacked_layout.itemAt(2).widget()   # The well label is the third widget
             well = well_label.text()
             if well in loaded_images:
                 np_array = loaded_images[well]
                 pixmap = numpy_to_qpixmap(np_array)
                 if pixmap:
-                    image_label = stacked_layout.itemAt(0).widget()  # The image label is the first widget
                     image_label.setPixmap(pixmap)
-                    # Optionally update the cache here:
                     self.thumbnail_cache[well] = np_array
 
     def on_plate_loading_finished(self):

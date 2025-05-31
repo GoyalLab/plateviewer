@@ -118,10 +118,14 @@ class ThreadedLoader(QObject):
         super().__init__()
         self.folder = folder
 
-    def load_images(self):
+    def load_images(self, folder):
+        """Load image metadata from the specified folder (no image loading yet)."""
+        if not folder:
+            return
+
         pattern = re.compile(r"_(?P<plate>plate\d+)_.*?(?P<well>[A-H](?:1[0-2]|[1-9]))[^\n]*?(?P<timepoint>\d{2}d\d{2}h\d{2}m)")
-        image_data = []
-        files = sorted(os.listdir(self.folder))
+        self.image_data = []
+        files = sorted(os.listdir(folder))
         for fname in files:
             if not fname.lower().endswith(".tif"):
                 continue
@@ -133,15 +137,19 @@ class ThreadedLoader(QObject):
             well = meta["well"]
             timepoint = meta["timepoint"]
             is_gfp = "GFP" in fname.upper()
-            image_data.append({
+            self.image_data.append({
                 "plate": plate,
                 "well": well,
                 "timepoint": timepoint,
-                "path": os.path.join(self.folder, fname),
+                "path": os.path.join(folder, fname),
                 "filename": fname,
                 "is_gfp": is_gfp
             })
-        self.image_data_ready.emit(image_data)
+
+        self.plates = sorted(set(d["plate"] for d in self.image_data))
+        self.plate_selector.clear()
+        self.plate_selector.addItems(self.plates)
+        self.update_plate()
 
 class LoadingThread(QThread):
     image_data_ready = pyqtSignal(list)
@@ -224,7 +232,7 @@ class PlateViewer(QWidget):
         self.scroll_area.setAlignment(Qt.AlignCenter)
 
         # Hide the grid until wells are loaded
-        self.scroll_area.hide()
+        #self.scroll_area.hide()
 
         # Detail view
         self.detail_widget = QWidget()
@@ -315,12 +323,51 @@ class PlateViewer(QWidget):
 
         self.installEventFilter(self)
 
+        # Add these lines to show the grid immediately
+        self.update_grid()  # Create the well buttons
+        self.scroll_area.show()  # Make sure the grid is visible
+
         # Prompt for folder and start loading thread
         folder = QFileDialog.getExistingDirectory(self, "Select Image Folder")
         if folder:
-            self.loading_thread = LoadingThread(folder)
-            self.loading_thread.image_data_ready.connect(self.on_image_data_ready)
-            self.loading_thread.start()
+            self.load_images(folder)
+            self.show()
+        #    self.loading_thread = LoadingThread(folder)
+        #    self.loading_thread.image_data_ready.connect(self.on_image_data_ready)
+        #    self.loading_thread.start()
+
+    def load_images(self, folder):
+        """Load image metadata from the specified folder (no image loading yet)."""
+        if not folder:
+            return
+
+        pattern = re.compile(r"_(?P<plate>plate\d+)_.*?(?P<well>[A-H](?:1[0-2]|[1-9]))[^\n]*?(?P<timepoint>\d{2}d\d{2}h\d{2}m)")
+        self.image_data = []
+        files = sorted(os.listdir(folder))
+        for fname in files:
+            if not fname.lower().endswith(".tif"):
+                continue
+            match = pattern.search(fname)
+            if not match:
+                continue
+            meta = match.groupdict()
+            plate = meta["plate"].upper()
+            well = meta["well"]
+            timepoint = meta["timepoint"]
+            is_gfp = "GFP" in fname.upper()
+            self.image_data.append({
+                "plate": plate,
+                "well": well,
+                "timepoint": timepoint,
+                "path": os.path.join(folder, fname),
+                "filename": fname,
+                "is_gfp": is_gfp
+            })
+
+        self.plates = sorted(set(d["plate"] for d in self.image_data))
+        self.plate_selector.clear()
+        self.plate_selector.addItems(self.plates)
+        self.update_plate()
 
     def on_image_data_ready(self, image_data):
         self.image_data = image_data
@@ -328,11 +375,8 @@ class PlateViewer(QWidget):
         self.plates = sorted(set(d["plate"] for d in self.image_data))
         self.plate_selector.addItems(self.plates)
         self.update_plate()
-        self.start_plate_loading_thread()  # <-- Only call here!
+        #self.start_plate_loading_thread()  # <-- Only call here!
         self.show()
-
-    def load_images(self, folder):
-        pass
 
     def on_loading_finished(self):
         """Show the main window after loading is complete."""
@@ -392,44 +436,6 @@ class PlateViewer(QWidget):
         self.singlet_checkbox.blockSignals(False)
         self.doublet_checkbox.blockSignals(False)
         self.inconclusive_checkbox.blockSignals(False)
-
-    def load_images(self, folder):
-        """Load images from the specified folder."""
-        if not folder:
-            return
-
-        # Updated regex to capture plate name from between underscores
-        pattern = re.compile(r"_(?P<plate>plate\d+)_.*?(?P<well>[A-H](?:1[0-2]|[1-9]))[^\n]*?(?P<timepoint>\d{2}d\d{2}h\d{2}m)")
-
-        files = sorted(os.listdir(folder))
-        for fname in files:
-            if not fname.lower().endswith(".tif"):
-                continue
-            match = pattern.search(fname)
-            if not match:
-                continue
-            meta = match.groupdict()
-            plate = meta["plate"].upper()  # Plate name extracted from between underscores
-            well = meta["well"]
-            timepoint = meta["timepoint"]
-
-            # Determine if the image is GFP or grayscale
-            is_gfp = "GFP" in fname.upper()
-            self.image_data.append({
-                "plate": plate,
-                "well": well,
-                "timepoint": timepoint,
-                "path": os.path.join(folder, fname),
-                "filename": fname,
-                "is_gfp": is_gfp
-            })
-
-        # Debugging: Print the loaded image data
-        print(f"Loaded image data: {self.image_data}")
-
-        self.plates = sorted(set(d["plate"] for d in self.image_data))
-        self.plate_selector.addItems(self.plates)
-        self.update_plate()
 
     def open_detail_view(self, well):
         self.zoom_state = None
@@ -523,7 +529,7 @@ class PlateViewer(QWidget):
     def update_plate(self):
         self.current_plate = self.plate_selector.currentText()
         self.update_grid()
-        self.start_plate_loading_thread()  # <-- Only call here!
+        #self.start_plate_loading_thread()  # <-- Only call here!
     
     def on_caching_finished(self):
         """Handle the completion of the caching thread."""
@@ -531,55 +537,23 @@ class PlateViewer(QWidget):
         self.update_grid()
 
     def update_grid(self):
-        """Update the grid view with well images and labels."""
         # Clear the existing grid layout
         for i in reversed(range(self.grid_layout.count())):
-            self.grid_layout.itemAt(i).widget().setParent(None)
+            widget = self.grid_layout.itemAt(i).widget()
+            if widget:
+                widget.setParent(None)
 
-        wells_by_plate = [d for d in self.image_data if d["plate"] == self.current_plate]
-        well_latest = {}
-        for d in wells_by_plate:
-            if d["well"] not in well_latest or d["timepoint"] < well_latest[d["well"]]["timepoint"]:
-                well_latest[d["well"]] = d
-
-        # Create placeholders for all wells
+        # Add clickable well name buttons in a grid (no image loading at all)
         for i, row in enumerate("ABCDEFGH"):
             for j in range(1, 13):
                 well = f"{row}{j}"
-
-                # Create a container widget with a vertical layout
-                container_widget = QWidget()
-                layout = QVBoxLayout(container_widget)
-                layout.setContentsMargins(0, 0, 0, 0)  # Remove margins
-                layout.setSpacing(0)
-
-                # Image label for the well image
-                image_label = QLabel()
-                image_label.setStyleSheet("background-color: black;")
-                image_label.setFixedSize(60, 60)  # Adjust size as needed
-                image_label.setAlignment(Qt.AlignCenter)
-                layout.addWidget(image_label)
-
-                # Transparent button for click handling
-                image_button = QPushButton()
-                image_button.setStyleSheet("background: transparent;")
-                image_button.setFixedSize(60, 60)
-                image_button.clicked.connect(lambda _, w=well: self.open_detail_view(w))
-                # Place the button on top of the label
-                image_button.setAttribute(Qt.WA_TransparentForMouseEvents, False)
-                image_button.raise_()
-                layout.addWidget(image_button, 0, Qt.AlignAbsolute)
-
-                # Well label
-                well_label = QLabel(well)
-                well_label.setStyleSheet(
-                    "color: white; background-color: rgba(0, 0, 0, 128); font-weight: bold; padding: 2px;"
+                btn = QPushButton(well)
+                btn.setFixedSize(60, 60)
+                btn.setStyleSheet(
+                    "color: white; background-color: #222; font-weight: bold; font-size: 14px; border: 1px solid #444;"
                 )
-                well_label.setAlignment(Qt.AlignCenter)
-                layout.addWidget(well_label)
-
-                # Add the container widget to the grid layout
-                self.grid_layout.addWidget(container_widget, i, j)
+                btn.clicked.connect(lambda _, w=well: self.open_detail_view(w))
+                self.grid_layout.addWidget(btn, i, j)
 
     def update_timepoint(self, tp, is_gfp=False):
         self.zoom_state = self.graphics_view.get_transform()

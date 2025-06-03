@@ -72,16 +72,17 @@ python plateViewer.py
 ---
 
 ## Browse plates
-![Plate view](tutorialScreenshots/plateView.png)
 
 * Use the dropdown menu at the top to switch between plates.
-* Click any well to open its images. (Note: well A1 is pre-cached and is fastest to start with)
+  
+![Plate view](tutorialScreenshots/plateView.png)
 
+* Click any well to open its images. (Note: well A1 is pre-cached and is fastest to start with)
+  
+![view of a well](tutorialScreenshots/wellView_wholeWell.png)
 ---
 
 ## Navigate timepoints
-
-![view of a well](tutorialScreenshots/wellView_wholeWell.png)
 
 * Use the timepoint buttons above the image.
 * Or use the keyboard:

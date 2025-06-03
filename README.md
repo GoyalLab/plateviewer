@@ -162,9 +162,9 @@ python plateViewer.py
 | **S**       | Previous well                          |
 | **F**       | Next well                              |
 | **W**       | Toggle GFP overlay                     |
-| **1**       | Mark as Singlet (blue)                 |
-| **2**       | Mark as Doublet (red)                  |
-| **3**       | Mark as Inconclusive (orange)          |
+| **1**       | Mark as singlet (blue)                 |
+| **2**       | Mark as doublet (red)                  |
+| **3**       | Mark as inconclusive (orange)          |
 | **Ctrl+E**  | Export annotations to CSV              |
 
 ---

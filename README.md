@@ -97,10 +97,10 @@ python plateViewer.py
 <table>
   <tr>
     <td>
-      <img src="tutorialScreenshots/wellView_expandedClone.png" width="300"/>
+      <img src="tutorialScreenshots/wellView_expandedClone.png" width="450"/>
     </td>
     <td>
-      <img src="tutorialScreenshots/wellView_singleCell.png" width="300"/>
+      <img src="tutorialScreenshots/wellView_singleCell.png" width="450"/>
     </td>
   </tr>
 </table>

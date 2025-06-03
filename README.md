@@ -1,21 +1,22 @@
 # 96-Well Plate Viewer (PyQt)
 
-This desktop application allows you to browse 96-well image datasets from high-content microscopy (e.g., Incucyte) using an intuitive plate-based interface.
+This desktop application allows you to browse image datasets from high-content microscopy (e.g., Incucyte) using an intuitive plate-based interface.
 
 ---
 
 ## Features
 
-* Plate overview with clickable wells arranged in standard 8×12 layout
-* Thumbnail previews of the most recent image per well
+* Plate overview with clickable wells arranged in standard 96-well plate layout (8x12)
 * Full-resolution zoomable view per well with timepoint toggling
-* Well annotation options: **Singlet \[1]**, **Doublet \[2]**, **Inconclusive \[3]**
+* **Zoom state is preserved when toggling between timepoints**—focus stays on your region of interest
+* Well annotation options: **singlet [1]** (blue box), **doublet [2]** (red box), **inconclusive [3]** (orange box)
 * Colored ring indicators on plate view based on annotations
-* Keyboard shortcuts for fast navigation
+* **Export annotations to CSV** with plate+well and annotation type
+* Keyboard shortcuts for fast navigation and annotation
 
 ---
 
-## File Format Requirements
+## File format requirements
 
 Each image filename must include:
 
@@ -31,72 +32,127 @@ Each image filename must include:
 
 Other filename content is allowed, but the three components above must be present.
 
+**Optional: View the GFP channel**
+
+* If you want to display a GFP overlay for a well/timepoint, include `GFP` (case-insensitive) somewhere in the filename for that image.
+* Any image **without** `GFP` in the filename is treated as a grayscale (brightfield) image by default.
+* You do **not** need to include "grayscale" in filenames—grayscale is assumed unless "GFP" is present.
+
 ---
 
-## Usage Instructions
+## First time setup
 
-### 1. Launch the App
+1. **Install Python:**  
+   Download and install Python 3.7 or newer from [python.org](https://www.python.org/downloads/).
+
+2. **Open a terminal or command prompt:**  
+   On Mac, open Terminal. On Windows, open Command Prompt.
+
+3. **Install dependencies:**  
+   Run the following command:
+   ```bash
+   pip install PyQt5 Pillow
+   ```
+
+---
+
+## Launch the app
 
 ```bash
-python plate_viewer.py
+python plateViewer.py
 ```
 
-### 2. Select Image Folder
+---
+
+## Select image folder
 
 * When prompted, select the folder containing your `.tif` images.
-* The app will take some time to load up, as it is processing many large image files.
+* The app could take a few seconds to load up depending on the number of plates you have.
 
-### 3. Browse Plates
+---
+
+## Browse plates
 
 * Use the dropdown menu at the top to switch between plates.
-* Click any well to open its zoomed-in view.
+* Click any well to open its images. (Note: well A1 is pre-cached and is fastest to start with)
 
-### 4. Navigate Timepoints
+---
+
+## Navigate timepoints
 
 * Use the timepoint buttons above the image.
-* Or press the keyboard:
+* Or use the keyboard:
 
   * **A** → Previous timepoint
   * **D** → Next timepoint
 
-### 5. Navigate Between Wells
+  *Zoom state is preserved when switching timepoints.*
+
+---
+
+## Navigate between wells
 
 * Use the **← Previous** and **Next →** buttons below the image.
+* Or use the keyboard:
 
-### 6. Label Wells
+  * **S** → Previous well
+  * **F** → Next well
+
+
+---
+
+## Toggle GFP overlay (if applicable)
+
+* Use the checkbox or press **W** to show/hide the GFP overlay.
+
+---
+
+## Label wells
 
 * Use the labeled checkboxes in well view:
 
-  * 🟩 **Singlet** → press **1**
-  * 🟥 **Doublet** → press **2**
-  * 🟧 **Inconclusive** → press **3**
-* The selected well gets annotated with a colored outline in plate view.
+  * 🟦 **singlet** → press **1**
+  * 🟥 **doublet** → press **2**
+  * 🟧 **inconclusive** → press **3**
 
-### 7. Return to Plate View
+* The selected well gets annotated with a colored outline in plate view, and logged in a later downloadable .csv format.
+
+---
+
+## Export annotations
+
+* Click **Export Annotations to CSV** (top bar) to save a spreadsheet of all marked wells.
+* The CSV will have two columns:
+  * `clone` (e.g., `1A1`, `2C3`)
+  * `incucyteNote` (`singlet`, `doublet`, or `inconclusive`)
+
+---
+
+## Return to plate view
 
 * Click **Back to Plate View** to go back.
 
 ---
 
-## Performance Tip
+## Keyboard shortcuts
 
-The app supports multiple plates, but **initial load time increases** with dataset size.
-
-**Recommended: Load only 1–2 plates at a time for best speed.**
+| Key         | Action                                 |
+|-------------|----------------------------------------|
+| **A**       | Previous timepoint                     |
+| **D**       | Next timepoint                         |
+| **S**       | Previous well                          |
+| **F**       | Next well                              |
+| **W**       | Toggle GFP overlay                     |
+| **1**       | Mark as Singlet (blue)                 |
+| **2**       | Mark as Doublet (red)                  |
+| **3**       | Mark as Inconclusive (orange)          |
+| **Ctrl+E**  | Export annotations to CSV              |
 
 ---
 
-## Dependencies
+## Notes for other size plates
 
-* Python 3.7+
-* PyQt5
-* Pillow
-
-### Install with pip:
-
-```bash
-pip install PyQt5 Pillow
-```
+* The app is designed for 96-well plates by default, but should work with images from other well plate sizes (it will still display a 96-well grid).
 
 ---
 

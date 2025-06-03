@@ -356,8 +356,8 @@ class PlateViewer(QWidget):
         # Get save location from user
         filename, _ = QFileDialog.getSaveFileName(
             self, 
-            "Save Markings CSV", 
-            "well_markings.csv", 
+            "Save annotations to CSV CSV", 
+            "wellAnnotations.csv", 
             "CSV Files (*.csv)"
         )
         
@@ -369,7 +369,7 @@ class PlateViewer(QWidget):
                 writer = csv.writer(csvfile)
                 
                 # Write header
-                writer.writerow(['clone', 'incucyteNote'])
+                writer.writerow(['clone', 'imageAnnotation'])
                 
                 # Write data
                 for (plate, well), marking in self.checked_wells.items():

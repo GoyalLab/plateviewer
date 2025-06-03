@@ -1,6 +1,6 @@
 # 96-Well Plate Viewer (PyQt)
 
-This desktop application allows you to browse image datasets from high-content microscopy (e.g., Incucyte) using an intuitive plate-based interface.
+This desktop application allows you to browse image datasets from high-content microscopy (e.g., Incucyte) using a plate-based interface.
 
 ---
 

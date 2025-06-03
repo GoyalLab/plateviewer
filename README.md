@@ -72,6 +72,7 @@ python plateViewer.py
 ---
 
 ## Browse plates
+![Plate view](tutorialScreenshots/plateView.png)
 
 * Use the dropdown menu at the top to switch between plates.
 * Click any well to open its images. (Note: well A1 is pre-cached and is fastest to start with)
@@ -80,13 +81,28 @@ python plateViewer.py
 
 ## Navigate timepoints
 
+![view of a well](tutorialScreenshots/wellView_wholeWell.png)
+
 * Use the timepoint buttons above the image.
 * Or use the keyboard:
 
   * **A** → Previous timepoint
   * **D** → Next timepoint
 
+* Scroll to zoom in and out of areas of interest.
+
   *Zoom state is preserved when switching timepoints.*
+
+<table>
+  <tr>
+    <td>
+      <img src="tutorialScreenshots/wellView_expandedClone.png" width="300"/>
+    </td>
+    <td>
+      <img src="tutorialScreenshots/wellView_singleCell.png" width="300"/>
+    </td>
+  </tr>
+</table>
 
 ---
 
@@ -116,6 +132,8 @@ python plateViewer.py
   * 🟧 **inconclusive** → press **3**
 
 * The selected well gets annotated with a colored outline in plate view, and logged in a later downloadable .csv format.
+
+![Plate view, annotated](tutorialScreenshots/plateView_annotated.png)
 
 ---
 

@@ -124,14 +124,19 @@ class ThreadedLoader(QObject):
         if not folder:
             return
 
-        pattern = re.compile(r"_(?P<plate>(?:plate|p)\d+)_.*?(?P<well>[A-H](?:1[0-2]|[1-9]))[^\n]*?(?P<timepoint>\d{2}d\d{2}h\d{2}m)")
+        pattern = re.compile(
+            r"(?P<plate>(?:plate|p)\d+).*?(?P<well>[A-H](?:1[0-2]|[1-9])).*?(?P<timepoint>\d{2}d\d{2}h\d{2}m)",
+            re.IGNORECASE
+        )
         self.image_data = []
         files = sorted(os.listdir(folder))
+        print("FILES FOUND:", files)
         for fname in files:
             if not fname.lower().endswith(".tif"):
                 continue
             match = pattern.search(fname)
             if not match:
+                print("NO MATCH:", fname)
                 continue
             meta = match.groupdict()
             plate = meta["plate"].upper()
@@ -390,7 +395,7 @@ class PlateViewer(QWidget):
         if not folder:
             return
 
-        pattern = re.compile(r"_(?P<plate>plate\d+)_.*?(?P<well>[A-H](?:1[0-2]|[1-9]))[^\n]*?(?P<timepoint>\d{2}d\d{2}h\d{2}m)")
+        pattern = re.compile(r"(?P<plate>(?:plate|p)\d+).*?(?P<well>[A-H](?:1[0-2]|[1-9])).*?(?P<timepoint>\d{2}d\d{2}h\d{2}m)", re.IGNORECASE)
         self.image_data = []
         files = sorted(os.listdir(folder))
         for fname in files:

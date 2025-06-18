@@ -124,7 +124,7 @@ class ThreadedLoader(QObject):
         if not folder:
             return
 
-        pattern = re.compile(r"_(?P<plate>plate\d+)_.*?(?P<well>[A-H](?:1[0-2]|[1-9]))[^\n]*?(?P<timepoint>\d{2}d\d{2}h\d{2}m)")
+        pattern = re.compile(r"_(?P<plate>(?:plate|p)\d+)_.*?(?P<well>[A-H](?:1[0-2]|[1-9]))[^\n]*?(?P<timepoint>\d{2}d\d{2}h\d{2}m)")
         self.image_data = []
         files = sorted(os.listdir(folder))
         for fname in files:

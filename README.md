@@ -20,7 +20,7 @@ This desktop application allows you to browse image datasets from high-content m
 
 Each image filename must include:
 
-* The word `plate` (case-insensitive), followed by a plate identifier (e.g., `PLATE01`)
+* The word `plate` (case-insensitive) or the letter 'p', followed by a plate identifier (e.g., `PLATE01`)
 * A well ID in the format `A1`–`H12`
 * A timepoint in the format `00d00h00m`
 
